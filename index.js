@@ -254,8 +254,7 @@ async function main() {
 	}
 	// Do this now, and then on an interval.
 	await fetchAndHandleBookings();
-	setInterval(fetchAndHandleBookings, 20000);
-	// setInterval(fetchAndHandleBookings, BOOKING_FETCH_INTERVAL_MINUTES * 60 * 1000);
+	setInterval(fetchAndHandleBookings, BOOKING_FETCH_INTERVAL_MINUTES * 60 * 1000);
 }
 
 main();
