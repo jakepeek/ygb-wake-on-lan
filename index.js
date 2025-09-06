@@ -10,7 +10,6 @@ const {
 const wol = require("wake_on_lan");
 const axios = require("axios");
 const moment = require("moment-timezone");
-const { findIpAddresses } = require("./network");
 
 // Global state for bay data and bay states.
 let bayData, bayStates = {};
@@ -49,7 +48,7 @@ function wakeBay(mac) {
 // Store bays here once fetched.
 let bays = [];
 
-async function getBays(lookupIps = false) {
+async function getBays() {
 	try {
 		console.log("Fetching bays from API...");
 		const response = await axios.get(`${API_ROOT}/bays`, {
@@ -64,26 +63,18 @@ async function getBays(lookupIps = false) {
 			const bayInfo = bayData.find(b => b.ref === bay.ref);
 			// Skip bays we don't have info for.
 			if (!bayInfo) continue;
+			if (!bayInfo.mac) throw new Error(`No MAC address for bay ref ${bay.ref} in bayData.json`);
+			if (!bayInfo.ip) throw new Error(`No IP address for bay ref ${bay.ref} in bayData.json`);
 			// Map to simpler object.
 			const mappedBay = {
 				id: bay.id,
 				ref: bay.ref,
 				range: bay.range,
-				mac: bayInfo.mac
+				mac: bayInfo.mac,
+				ip: bayInfo.ip,
 			}
 			// Done.
 			mappedBays.push(mappedBay);
-		}
-		// If requested, look up IPs for MAC addresses.
-		if (lookupIps) {
-			const macs = mappedBays.map(b => b.mac);
-			console.log("Looking up IP addresses for MACs:", macs);
-			const macIpMap = await findIpAddresses(macs);
-			// Add IPs to bays.
-			for (const bay of mappedBays) {
-				if (!macIpMap[bay.mac]) throw new Error(`Failed to find IP for MAC ${bay.mac}`);
-				bay.ip = macIpMap[bay.mac];
-			}
 		}
 		// Done.
 		console.log("Bays fetched successfully:", mappedBays);
@@ -176,26 +167,21 @@ async function calculateBayStates(bookings) {
 }
 
 /**
- * Handle waking and sleeping bays based on their states.
+ * Handle waking bays based on their states.
+ * We will always send a wake command to bays that need to be active - this ensures even
+ * if a wake packet was missed, the bay will still be woken on the next check.
+ * Sleeping is not necessary as bays will sleep automatically when inactive.
  * @param {Object} previousStates
  * @param {Object} newStates
  * @returns {Promise<void>}
  */
-async function handleBayStates(previousStates, newStates) {
-	for (const bayRef in newStates) {
-		const isActive = newStates[bayRef] === true;
-		const wasActive = previousStates[bayRef] === true;
-		// If the bay is active and was not active before, wake it.
-		if (isActive && !wasActive) {
+async function handleBayStates(bayStates) {
+	for (const bayRef in bayStates) {
+		// If the bay is supposed to be active, wake it.
+		if (bayStates[bayRef] === true) {
 			const mac = bays.find(b => b.ref === bayRef)?.mac;
 			if (mac) await wakeBay(mac);
 			else console.error(`No MAC address found for bay ${bayRef}, cannot wake.`);
-		}
-		// If the bay is not active and was active before, sleep it.
-		else if (!isActive && wasActive) {
-			const mac = bays.find(b => b.ref === bayRef)?.mac;
-			if (mac) await sleepBay(mac);
-			else console.error(`No MAC address found for bay ${bayRef}, cannot sleep.`);
 		}
 	}
 }
@@ -203,7 +189,7 @@ async function handleBayStates(previousStates, newStates) {
 async function main() {
 
 	// Load bays first - we need them to interpret bookings.
-	bays = await getBays(true);
+	bays = await getBays();
 	if (!bays) {
 		throw new Error("Failed to fetch bays on startup. Cannot continue.");
 	}
@@ -238,15 +224,15 @@ async function main() {
 		}
 		// Otherwise, work out bay states.
 		console.log(`Fetched ${bookings.length} bookings:`, bookings.map(b => b.id), "\n");
-		const newBayStates = await calculateBayStates(bookings);
 		console.log("Calculating bay states...");
+		const newBayStates = await calculateBayStates(bookings);
 		console.log("Old bay states:", bayStates);
 		console.log("New bay states:", newBayStates);
+		bayStates = newBayStates;
 		// Handle any changes.
 		try {
-			await handleBayStates(bayStates, newBayStates);
+			await handleBayStates(bayStates);
 			// Save new states.
-			bayStates = newBayStates;
 			console.log("Bay states handled successfully.\n");
 		} catch (error) {
 			console.error("Error handling bay states:", error.message);
