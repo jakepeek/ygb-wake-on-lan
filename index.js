@@ -64,14 +64,12 @@ async function getBays() {
 			// Skip bays we don't have info for.
 			if (!bayInfo) continue;
 			if (!bayInfo.mac) throw new Error(`No MAC address for bay ref ${bay.ref} in bayData.json`);
-			if (!bayInfo.ip) throw new Error(`No IP address for bay ref ${bay.ref} in bayData.json`);
 			// Map to simpler object.
 			const mappedBay = {
 				id: bay.id,
 				ref: bay.ref,
 				range: bay.range,
-				mac: bayInfo.mac,
-				ip: bayInfo.ip,
+				mac: bayInfo.mac
 			}
 			// Done.
 			mappedBays.push(mappedBay);
