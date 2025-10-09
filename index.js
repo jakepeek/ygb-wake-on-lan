@@ -10,6 +10,7 @@ const {
 const wol = require("wake_on_lan");
 const axios = require("axios");
 const moment = require("moment-timezone");
+const { powerOnProjector } = require("./pjLink");
 
 // Global state for bay data and bay states.
 let bayData, bayStates = {};
@@ -45,6 +46,22 @@ function wakeBay(mac) {
 	});
 }
 
+async function wakeProjector(projector) {
+	if (projector.type === "PJLINK") {
+		if (!projector.ip) throw new Error("No IP address for PJLink projector.");
+		console.log(`Waking PJLink projector at ${projector.ip}...`);
+		try {
+			const response = await powerOnProjector(projector.ip);
+			console.log(`Projector at ${projector.ip} powered on successfully:`, response);
+		} catch (error) {
+			console.error(`Failed to power on projector at ${projector.ip}:`, error.message);
+			throw error;
+		}
+	} else {
+		throw new Error(`Unknown projector type: ${projector.type}`);
+	}
+}
+
 // Store bays here once fetched.
 let bays = [];
 
@@ -69,7 +86,8 @@ async function getBays() {
 				id: bay.id,
 				ref: bay.ref,
 				range: bay.range,
-				mac: bayInfo.mac
+				mac: bayInfo.mac,
+				projector: bayInfo.projector || null
 			}
 			// Done.
 			mappedBays.push(mappedBay);
@@ -175,11 +193,33 @@ async function calculateBayStates(bookings) {
  */
 async function handleBayStates(bayStates) {
 	for (const bayRef in bayStates) {
-		// If the bay is supposed to be active, wake it.
+		// If the bay is supposed to be active, attempt to wake it.
 		if (bayStates[bayRef] === true) {
-			const mac = bays.find(b => b.ref === bayRef)?.mac;
-			if (mac) await wakeBay(mac);
-			else console.error(`No MAC address found for bay ${bayRef}, cannot wake.`);
+			// Find a matching bay.
+			const bayMatch = bays.find(b => b.ref === bayRef);
+			// Skip if no match.
+			if (!bayMatch) {
+				console.warn(`No bay found for ref ${bayRef}, cannot wake.`);
+				continue;
+			}
+			// Wake the PC if there is a MAC address.
+			if (bayMatch.mac) {
+				try {
+					await wakeBay(bayMatch.mac);
+				} catch (error) {
+					console.error(`Failed to wake bay ${bayRef}:`, error.message);
+				}
+			} else {
+				console.error(`No MAC address found for bay ${bayRef}, cannot wake.`);
+			}
+			// Wake the projector if there is one specified.
+			if (bayMatch.projector) {
+				try {
+					await wakeProjector(bayMatch.projector);
+				} catch (error) {
+					console.error(`Failed to wake projector for bay ${bayRef}:`, error.message);
+				}
+			}
 		}
 	}
 }
