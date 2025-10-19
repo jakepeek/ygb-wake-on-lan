@@ -273,7 +273,7 @@ async function getCurrentBayStates() {
 async function main() {
 
 	// Start the server.
-	const PORT = process.env.NODE_ENV === "production" ? 80 : 3000;
+	const PORT = 8080;
 	const server = createServer({
 		getBays: getCurrentBays,
 		setBays: setBays,
