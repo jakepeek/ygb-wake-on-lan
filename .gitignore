@@ -140,3 +140,7 @@ vite.config.ts.timestamp-*
 
 # Project specific ignores
 bayData.json
+
+misc/
+
+.DS_Store

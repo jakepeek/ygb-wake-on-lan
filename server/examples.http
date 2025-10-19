@@ -1,0 +1,22 @@
+###
+
+# Get the currently configured bays.
+GET http://localhost:3000/api/bays
+Accept: application/json
+
+###
+
+# Update the currently configured bays.
+PUT http://localhost:3000/api/bays
+Content-Type: application/json
+
+[
+  {
+    "ref": "B1",
+    "mac": "EC:75:0C:C2:56:11",
+    "projector": {
+      "type": "PJLINK",
+      "ip": "192.168.99.122"
+    }
+  }
+]

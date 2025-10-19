@@ -58,8 +58,7 @@ nano .env
 Key variables:
 - `API_KEY` → Your YGB API key  
 - `API_ROOT` → The API base URL for your venue  
-- `PRE_BOOKING_MINUTES` → Minutes before booking start to wake a bay  
-- `POST_BOOKING_MINUTES` → Minutes after booking end to keep bay awake  
+- `PRE_BOOKING_MINUTES` → Minutes before booking start to wake a bay 
 - `BAY_FETCH_INTERVAL_MINUTES` → How often to refresh bay definitions  
 - `BOOKING_FETCH_INTERVAL_MINUTES` → How often to poll bookings  
 

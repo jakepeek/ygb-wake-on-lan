@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" href="styles/bootstrap.min.css">
+	<title>WOL Manager</title>
+</head>
+
+<body>
+
+	<body>
+		<div class="container mt-4">
+			<h2>WOL Manager</h2>
+
+			<h5 class="mt-4">Bay States</h5>
+			<div id="bayStates" class="d-flex flex gap-2"></div>
+
+			<h5 class="mt-4">Bay Configuration</h5>
+			<div class="mb-3">
+				<textarea id="baysTextArea" class="form-control" rows="10"
+				placeholder="Bays will appear here…"></textarea>
+			</div>
+			<div class="mb-3">
+				<button id="loadBtn" class="btn btn-primary me-2">Load Bays</button>
+				<button id="saveBtn" class="btn btn-success">Save Bays</button>
+			</div>
+		</div>
+
+		<script>
+			// Load the current bays list and display it
+			function loadBays() {
+				fetch('/api/bays')
+					.then((response) => {
+						if (!response.ok) {
+							throw new Error('Failed to fetch bays');
+						}
+						return response.json();
+					})
+					.then((data) => {
+						document.getElementById('baysTextArea').value = JSON.stringify(
+							data,
+							null,
+							2
+						);
+					})
+					.catch((error) => {
+						alert('Error loading bays: ' + error.message);
+					});
+			}
+
+			// Save the JSON from the textarea back to the server
+			function saveBays() {
+				const text = document.getElementById('baysTextArea').value;
+				let data;
+				try {
+					data = JSON.parse(text);
+				} catch (err) {
+					alert('Invalid JSON: ' + err.message);
+					return;
+				}
+				fetch('/api/bays', {
+					method: 'PUT',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify(data),
+				})
+					.then((response) => {
+						if (!response.ok) {
+							throw new Error('Failed to save bays');
+						}
+						return response.json();
+					})
+					.then((updated) => {
+						document.getElementById('baysTextArea').value = JSON.stringify(
+							updated,
+							null,
+							2
+						);
+						alert('Bays saved successfully');
+					})
+					.catch((error) => {
+						alert('Error saving bays: ' + error.message);
+					});
+			}
+
+			// Attach event handlers and load the bays on page load
+			window.addEventListener('DOMContentLoaded', () => {
+				document.getElementById('loadBtn').addEventListener('click', loadBays);
+				document.getElementById('saveBtn').addEventListener('click', saveBays);
+				loadBays();
+				// Load bay states immediately and then refresh every 10 seconds
+				updateBayStates();
+				setInterval(updateBayStates, 10000);
+			});
+
+			// Fetch current bay states and display them
+			function updateBayStates() {
+				fetch('/api/bay-states')
+					.then((response) => {
+						if (!response.ok) {
+							throw new Error('Failed to fetch bay states');
+						}
+						return response.json();
+					})
+					.then((states) => {
+						const container = document.getElementById('bayStates');
+						container.innerHTML = '';
+						Object.entries(states).forEach(([ref, isActive]) => {
+							const tile = document.createElement('div');
+							// Use Bootstrap badge styles with a color based on active state
+							tile.className = isActive
+								? 'badge text-bg-success p-2 me-2 mb-2'
+								: 'badge text-bg-secondary p-2 me-2 mb-2';
+							tile.textContent = `${ref}: ${isActive ? 'Active' : 'Inactive'}`;
+							container.appendChild(tile);
+						});
+					})
+					.catch((error) => {
+						console.error('Error fetching bay states:', error);
+					});
+			}
+
+		</script>
+	</body>
+</body>
+
+</html>

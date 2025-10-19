@@ -3,7 +3,6 @@ const {
 	API_KEY,
 	API_ROOT,
 	PRE_BOOKING_MINUTES,
-	POST_BOOKING_MINUTES,
 	BAY_FETCH_INTERVAL_MINUTES,
 	BOOKING_FETCH_INTERVAL_MINUTES
 } = require("./config");
@@ -11,6 +10,9 @@ const wol = require("wake_on_lan");
 const axios = require("axios");
 const moment = require("moment-timezone");
 const { powerOnProjector } = require("./pjLink");
+const fs = require("node:fs").promises;
+
+const createServer = require("./server");
 
 // Global state for bay data and bay states.
 let bayData, bayStates = {};
@@ -170,7 +172,7 @@ async function calculateBayStates(bookings) {
 			// and post-booking window.
 			if (now.isBetween(
 				start.clone().subtract(PRE_BOOKING_MINUTES, 'minutes'),
-				end.clone().add(POST_BOOKING_MINUTES, 'minutes')
+				end
 			)) {
 				isActive = true;
 				// No need to check further bookings for this bay.
@@ -224,7 +226,62 @@ async function handleBayStates(bayStates) {
 	}
 }
 
+// Fetch bookings for the next few hours, looking back a few hours too.
+async function fetchAndHandleBookings() {
+	const now = moment();
+	const from = now.clone().subtract(2, 'hours').startOf('hour');
+	const to = now.clone().add(6, 'hours').startOf('hour');
+	console.log(`Fetching bookings from ${from.format("Do MMM HH:mm")} to ${to.format("Do MMM HH:mm")}...`);
+	const bookings = await getBookings(from, to);
+	// Exit if we failed to get bookings.
+	if (!bookings) {
+		console.error("Failed to fetch bookings.");
+		return;
+	}
+	// Otherwise, work out bay states.
+	console.log(`Fetched ${bookings.length} bookings:`, bookings.map(b => b.id), "\n");
+	console.log("Calculating bay states...");
+	const newBayStates = await calculateBayStates(bookings);
+	console.log("Old bay states:", bayStates);
+	console.log("New bay states:", newBayStates);
+	bayStates = newBayStates;
+	// Handle any changes.
+	try {
+		await handleBayStates(bayStates);
+		// Save new states.
+		console.log("Bay states handled successfully.\n");
+	} catch (error) {
+		console.error("Error handling bay states:", error.message);
+	}
+}
+
+// Create some methods to expose to the server.
+async function getCurrentBays() {
+	return bays;
+}
+
+async function setBays(newBays) {
+	bays = newBays;
+	// Persist the bays, saving the JSON file.
+	await fs.writeFile("./bayData.json", JSON.stringify(bays, null, 4), "utf8");
+}
+
+async function getCurrentBayStates() {
+	return bayStates;
+}
+
 async function main() {
+
+	// Start the server.
+	const PORT = process.env.NODE_ENV === "production" ? 80 : 3000;
+	const server = createServer({
+		getBays: getCurrentBays,
+		setBays: setBays,
+		getBayStates: getCurrentBayStates
+	});
+	server.listen(PORT, () => {
+		console.log(`Server running on port ${PORT}`);
+	});
 
 	// Load bays first - we need them to interpret bookings.
 	bays = await getBays();
@@ -248,34 +305,6 @@ async function main() {
 		}
 	}, BAY_FETCH_INTERVAL_MINUTES * 60 * 1000);
 
-	// Fetch bookings for the next few hours, looking back a few hours too.
-	async function fetchAndHandleBookings() {
-		const now = moment();
-		const from = now.clone().subtract(2, 'hours').startOf('hour');
-		const to = now.clone().add(6, 'hours').startOf('hour');
-		console.log(`Fetching bookings from ${from.format("Do MMM HH:mm")} to ${to.format("Do MMM HH:mm")}...`);
-		const bookings = await getBookings(from, to);
-		// Exit if we failed to get bookings.
-		if (!bookings) {
-			console.error("Failed to fetch bookings.");
-			return;
-		}
-		// Otherwise, work out bay states.
-		console.log(`Fetched ${bookings.length} bookings:`, bookings.map(b => b.id), "\n");
-		console.log("Calculating bay states...");
-		const newBayStates = await calculateBayStates(bookings);
-		console.log("Old bay states:", bayStates);
-		console.log("New bay states:", newBayStates);
-		bayStates = newBayStates;
-		// Handle any changes.
-		try {
-			await handleBayStates(bayStates);
-			// Save new states.
-			console.log("Bay states handled successfully.\n");
-		} catch (error) {
-			console.error("Error handling bay states:", error.message);
-		}
-	}
 	// Do this now, and then on an interval.
 	await fetchAndHandleBookings();
 	setInterval(fetchAndHandleBookings, BOOKING_FETCH_INTERVAL_MINUTES * 60 * 1000);
